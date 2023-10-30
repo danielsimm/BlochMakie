@@ -2,54 +2,17 @@ using GLMakie
 using LinearAlgebra
 using ColorSchemes
 
+const default_colorscheme = ColorScheme([RGBAf(139/255, 219/255, 225/255, 255/255), RGBAf(1.0, 1.0, 1.0, 0.0), RGBAf(254/255, 216/255, 219/255, 1.0)])
+const default_vectorcolor = RGBAf(227/255, 159/255, 27/255, 1)
+
 function angle_to_cartesian(ϕ, θ)
     x = cos(ϕ) * sin(θ)
     y = sin(ϕ) * sin(θ)
     z = cos(θ)
     return x, y, z
 end
-function equator!(ax::Axis3; color=:grey, linewidth=1)
-    θ = LinRange(0, 2π, 100)
-    lines!(ax, cos.(θ), sin.(θ), zeros(100), color=color, linewidth=linewidth)
-    return ax
-end
 
-function smooth_transition(x1, x2, frames)
-    factors = 0.5 .* (tanh.(LinRange(-pi, pi, frames)) .+1)
-    return x2 .* factors .+ x1 .* (1 .- factors)
-end
-
-function geodetic!(ax::Axis3; color=:grey, linewidth=1)
-    θ = LinRange(0, 2π, 100)
-    lines!(ax, cos.(θ), sin.(θ), zeros(100), color=color, linewidth=linewidth)
-    lines!(ax, zeros(100), cos.(θ), sin.(θ), color=color, linewidth=linewidth)
-    lines!(ax, sin.(θ), zeros(100), cos.(θ), color=color, linewidth=linewidth)
-    return ax
-end
-
-function phi_projection!(ax::Axis3, ϕ, θ)
-    dots = round(Int, ϕ*20)
-    dotsx = [angle_to_cartesian.(LinRange(0.0, ϕ, dots), θ)[i][1] for i in 1:dots]
-    dotsy = [angle_to_cartesian.(LinRange(0.0, ϕ, dots), θ)[i][2] for i in 1:dots]
-    lines!(ax, dotsx, dotsy, zeros(length(dots)), color=orange, linewidth=12)
-    text!(ax, Point3f(angle_to_cartesian(ϕ/2, π/2)); text=L"ϕ", color=orange, fontsize=100)
-    return ax
-end
-
-function theta_projection!(ax, ϕ, θ)
-    dots = round(Int, θ*20)
-    x, y, z = angle_to_cartesian(ϕ, θ)
-    lines!(ax, [x, x], [y, y], [0, z], color=orange, linewidth=8, linestyle=:dot)
-    # dotted curved line to axis
-    dotsx = [angle_to_cartesian.(ϕ, LinRange(0.0, θ, dots))[i][1] for i in 1:dots] 
-    dotsy = [angle_to_cartesian.(ϕ, LinRange(0.0, θ, dots))[i][2] for i in 1:dots]
-    dotsz = [angle_to_cartesian.(ϕ, LinRange(0.0, θ, dots))[i][3] for i in 1:dots]
-    lines!(ax, dotsx, dotsy, dotsz, color=orange, linewidth=12)
-    text!(ax, Point3f(angle_to_cartesian(ϕ, θ/2)); text=L"θ", color=orange, fontsize=100)
-    return ax
-end
-
-function sphere!(ax::Axis3)
+function sphere()
     r = 1.0
     theta = LinRange(0, pi, 100)
     phi = LinRange(0, 2pi, 100)
@@ -57,32 +20,46 @@ function sphere!(ax::Axis3)
     x = [r * cos(φv) * sin(θv) for θv in theta, φv in phi]
     y = [r * sin(φv) * sin(θv) for θv in theta, φv in phi]
     z = [r * cos(θv) for θv in theta, φv in 2phi]
-    
-    surface!(ax, x, y, z, transparency=true, shading=false, ssao=false, diffuse=Vec3f(1.0), specular=Vec3f(0.0), colormap=cs)
+
+    return x, y, z
 end
 
-const cs = ColorScheme([RGBAf(139/255, 219/255, 225/255, 255/255), RGBAf(1.0, 1.0, 1.0, 0.0), RGBAf(254/255, 216/255, 219/255, 1.0)])
-const orange = RGBAf(227/255, 159/255, 27/255, 1)
+function equator()
+    θ = LinRange(0, 2π, 100)
+    return cos.(θ), sin.(θ), zeros(100)
+end
 
-function bloch_plot(ϕ, θ)
-    fig = Figure(resolution = (2000, 2000), backgroundcolor = (:white, 0.0))
-    ax = Axis3(fig[1, 1], aspect=(1,1,1), azimuth=0.2, elevation=pi/8, perspectiveness=1.0)
-    hidedecorations!(ax)
-    hidespines!(ax)
-    equator!(ax)
-    geodetic!(ax)
-    sphere!(ax)
-    phi_projection!(ax, ϕ, θ)
-    theta_projection!(ax, ϕ, θ)
-    limits!(ax, (-0.9, 0.9), (-0.9, 0.9), (-0.9, 0.9))
+function phi_projection(ϕ, θ)
+    dots = round(Int, ϕ*20)
+    if dots ≤ 1
+        dots = 2
+    end
+    dotsx = [angle_to_cartesian.(LinRange(0.0, ϕ, dots), θ)[i][1] for i in 1:dots]
+    dotsy = [angle_to_cartesian.(LinRange(0.0, ϕ, dots), θ)[i][2] for i in 1:dots]
+    return dotsx, dotsy, zeros(length(dots))
+end
 
-    #mesh!(ax, Sphere(Point3f(0), 1.0f0), transparency=true, alpha=0.05, colormap=:viridis)
-    lines!(ax, [Point3f(0), Point3f(1.6, 0, 0)], color=:black)
-    lines!(ax, [Point3f(0), Point3f(0, 1.6, 0)], color=:black)
-    lines!(ax, [Point3f(0), Point3f(0, 0, 1.6)], color=:black)
-    x, y, z = angle_to_cartesian(ϕ, θ)
-    arrows!(ax, [0], [0], [0], [x], [y], [z], color=orange, arrowhead=:Sphere, normalize=true, arrowsize=0.05, shading=false, specular=Vec3f(0.0))
-    return fig
+function phi_text_pos(ϕ, θ)
+    x, y, z = angle_to_cartesian(ϕ/2, θ)
+    z = 0
+    x *= 1.2
+    y *= 1.2
+    return x,y,z
+end
+
+
+function theta_projection(ϕ, θ)
+    dots = round(Int, θ*20)
+    if dots ≤ 1
+        dots = 2
+    end
+    
+    # dotted curved line to axis
+    dotsx = [angle_to_cartesian.(ϕ, LinRange(0.0, θ, dots))[i][1] for i in 1:dots] 
+    dotsy = [angle_to_cartesian.(ϕ, LinRange(0.0, θ, dots))[i][2] for i in 1:dots]
+    dotsz = [angle_to_cartesian.(ϕ, LinRange(0.0, θ, dots))[i][3] for i in 1:dots]
+    
+    return dotsx, dotsy, dotsz
 end
 
 function calculate_rgba(rgb1, rgb2, rgba_bg)::RGBAf
@@ -112,4 +89,85 @@ function alpha_colorbuffer(figure)
     end
 end
 
-save("test.png", alpha_colorbuffer(bloch_plot(0.5, 0.8)))
+function smooth_transition(x1, x2, frames)
+    factors = 0.5 .* (tanh.(LinRange(-pi, pi, frames)) .+1)
+    return x2 .* factors .+ x1 .* (1 .- factors)
+end
+
+function bloch_plot(ϕ, θ, size=1000; cs=default_colorscheme, vec_color=default_vectorcolor)
+    fig = Figure(resolution = (size, size), backgroundcolor=(:white, 0.0))
+    ax = Axis3(fig[1, 1], aspect=(1,1,1), azimuth=0.2, elevation=pi/8, perspectiveness=0.0)
+    hidedecorations!(ax)
+    hidespines!(ax)
+
+    surface!(ax, sphere()..., transparency=true, shading=false, ssao=false, diffuse=Vec3f(1.0), specular=Vec3f(0.0), colormap=cs)
+    lines!(ax, equator()..., color=:grey, linewidth=1)
+
+    # define observables
+    phi_proj_obs = Observable(Point3f.(phi_projection(ϕ, θ)...))
+    theta_proj_obs = Observable(Point3f.(theta_projection(ϕ, θ)...))
+    pos_obs = Observable([Point3f(angle_to_cartesian(ϕ, θ)...)])
+    z_proj = Observable([Point3f.(angle_to_cartesian(ϕ, θ)...), Point3f.(angle_to_cartesian(ϕ, θ)[1], angle_to_cartesian(ϕ, θ)[2], 0.0)])
+    phi_text_obs = Observable(Point3f(phi_text_pos(ϕ, θ)...))
+    theta_text_obs = Observable(Point3f(angle_to_cartesian(ϕ, θ/2)))
+
+    arrows!(ax, [Point3f(0)], pos_obs, color=vec_color, arrowhead=:Sphere, normalize=true, arrowsize=0.05, shading=false, specular=Vec3f(0.0))
+
+    lines!(ax, phi_proj_obs, color=vec_color, linewidth=12)
+    text!(ax, phi_text_obs; text=L"ϕ", color=vec_color, fontsize=100)
+    lines!(ax, theta_proj_obs, color=vec_color, linewidth=12)
+    text!(ax, theta_text_obs; text=L"θ", color=vec_color, fontsize=100)
+    limits!(ax, (-0.9, 0.9), (-0.9, 0.9), (-0.9, 0.9))
+    lines!(ax, z_proj, color=vec_color, linewidth=8, linestyle=:dot)
+
+    lines!(ax, [Point3f(0), Point3f(1.6, 0, 0)], color=:black)
+    lines!(ax, [Point3f(0), Point3f(0, 1.6, 0)], color=:black)
+    lines!(ax, [Point3f(0), Point3f(0, 0, 1.6)], color=:black)
+    
+    #display(fig)
+    phis = Float32.(smooth_transition(0.0, 2*pi, 500))
+    thetas = Float32.(smooth_transition(pi/2 ,-pi/2, 500))
+    for t in 1:500
+        ϕ = phis[t]
+        θ = thetas[t]
+        phi_proj_obs[] = Point3f.(phi_projection(ϕ, θ)...)
+        theta_proj_obs[] = Point3f.(theta_projection(ϕ, θ)...)
+        pos_obs[] = [Point3f(angle_to_cartesian(ϕ, θ)...)]
+        z_proj[] = [Point3f.(angle_to_cartesian(ϕ, θ)...), Point3f.(angle_to_cartesian(ϕ, θ)[1], angle_to_cartesian(ϕ, θ)[2], 0.0)]
+        phi_text_obs[] = Point3f(phi_text_pos(ϕ, θ)...)
+        theta_text_obs[] = Point3f(angle_to_cartesian(ϕ, θ/2))
+        sleep(0.01)
+        save("frame_$(t).png", alpha_colorbuffer(fig))
+    end
+
+end
+
+phis = smooth_transition(0.0f0, 0.5f0, 200)
+# function bloch_plot_transparent(ϕ, θ, size=1000; cs=default_colorscheme, vec_color=default_vectorcolor)
+#     fig = Figure(resolution = (size, size), backgroundcolor = (:white, 0.0))
+#     ax = Axis3(fig[1, 1], aspect=(1,1,1), azimuth=0.2, elevation=pi/8, perspectiveness=1.0)
+#     hidedecorations!(ax)
+#     hidespines!(ax)
+
+#     surface!(ax, sphere()..., transparency=true, shading=false, ssao=false, diffuse=Vec3f(1.0), specular=Vec3f(0.0), colormap=cs)
+#     lines!(ax, equator()..., color=:grey, linewidth=1)
+
+#     x, y, z = angle_to_cartesian(ϕ, θ)
+#     arrows!(ax, [0], [0], [0], [x], [y], [z], color=vec_color, arrowhead=:Sphere, normalize=true, arrowsize=0.05, shading=false, specular=Vec3f(0.0))
+
+#     lines!(ax, phi_projection(ϕ, θ)..., color=vec_color, linewidth=12)
+#     text!(ax, Point3f(angle_to_cartesian(ϕ/2, π/2)); text=L"ϕ", color=vec_color, fontsize=100)
+#     lines!(ax, theta_projection(ϕ, θ)..., color=vec_color, linewidth=12)
+#     text!(ax, Point3f(angle_to_cartesian(ϕ, θ/2)); text=L"θ", color=vec_color, fontsize=100)
+#     limits!(ax, (-0.9, 0.9), (-0.9, 0.9), (-0.9, 0.9))
+#     lines!(ax, [x, x], [y, y], [0, z], color=vec_color, linewidth=8, linestyle=:dot)
+
+#     lines!(ax, [Point3f(0), Point3f(1.6, 0, 0)], color=:black)
+#     lines!(ax, [Point3f(0), Point3f(0, 1.6, 0)], color=:black)
+#     lines!(ax, [Point3f(0), Point3f(0, 0, 1.6)], color=:black)
+    
+#     return alpha_colorbuffer(fig)
+# end
+
+
+bloch_plot(0.0, 0.0)
